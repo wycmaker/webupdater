@@ -11,5 +11,10 @@
         /// 資料夾名稱
         /// </summary>
         public string DirectoryName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 備份路徑
+        /// </summary>
+        public string BackupPath { get; set; } = string.Empty;
     }
 }

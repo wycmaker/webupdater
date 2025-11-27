@@ -1,13 +1,10 @@
 using website.updater.Models;
-using website.updater.Utils;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
 builder.Services.AddControllers();
-
-builder.Services.AddScoped<ZipUtils>();
 
 builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AppInfo"));
 

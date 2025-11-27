@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Options;
 using Microsoft.Web.Administration;
 using System.ComponentModel;
-using System.Diagnostics;
 using website.updater.Filters;
 using website.updater.Models;
 using website.updater.Utils;
@@ -11,16 +10,8 @@ namespace website.updater.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class UpdateController : ControllerBase
+    public class UpdateController(IOptions<AppSettings> options) : ControllerBase
     {
-        private readonly AppSettings _appSettings;
-        private readonly ZipUtils _zipUtils;
-
-        public UpdateController(IOptions<AppSettings> options, ZipUtils zipUtils)
-        {
-            _appSettings = options.Value;
-            _zipUtils = zipUtils;
-        }
 
         [HmacAuth("402881e69439739b01943992ce840002")]
         [HttpPost("pool/{appPoolName}")]
@@ -31,36 +22,40 @@ namespace website.updater.Controllers
         {
             try
             {
-                var destinationPath = CheckAppPoolName(appPoolName);
+                var (destinationPath, backupPath) = AppPoolUtils.CheckAppPoolName(options.Value, appPoolName);
 
                 if (string.IsNullOrEmpty(destinationPath)) return NotFound($"{appPoolName}尚未定義");
 
                 if (!file.ContentType.StartsWith("application/zip") && !file.ContentType.StartsWith("application/x-zip-compressed")) return BadRequest("檔案格式錯誤，請上傳zip檔案");
 
-                using (ServerManager serverManager = new ServerManager())
+                using ServerManager serverManager = new();
+                // 找到指定的應用程式集區
+                ApplicationPool appPool = serverManager.ApplicationPools[appPoolName];
+
+                if (appPool == null) return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
+
+                // 停止應用程式集區
+                appPool.Stop();
+
+                Thread.Sleep(1000);
+
+                // 執行備份
+                if (!string.IsNullOrEmpty(backupPath))
                 {
-                    // 找到指定的應用程式集區
-                    ApplicationPool appPool = serverManager.ApplicationPools[appPoolName];
-
-                    if (appPool == null) return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
-
-                    // 停止應用程式集區
-                    appPool.Stop();
-
-                    Thread.Sleep(1000);
-
-                    // 處理更新
-                    using (var fileStream = file.OpenReadStream())
-                    {
-                        _zipUtils.ExtractZipFile(fileStream, destinationPath);
-                    }
-
-                    // 啟動應用程式集區
-                    appPool.Start();
-
-                    Thread.Sleep(1000);
-                    return Ok($"{appPoolName}的程式已成功更新");
+                    AppPoolUtils.BackupDirectory(destinationPath, backupPath, appPoolName);
                 }
+
+                // 處理更新
+                using (var fileStream = file.OpenReadStream())
+                {
+                    ZipUtils.ExtractZipFile(fileStream, destinationPath);
+                }
+
+                // 啟動應用程式集區
+                appPool.Start();
+
+                Thread.Sleep(1000);
+                return Ok($"{appPoolName}的程式已成功更新");
             }
             catch (Exception ex)
             {
@@ -77,21 +72,20 @@ namespace website.updater.Controllers
         {
             try
             {
-                if (string.IsNullOrEmpty(CheckAppPoolName(appPoolName))) return NotFound($"{appPoolName}尚未定義");
+                var (destination, backup) = AppPoolUtils.CheckAppPoolName(options.Value, appPoolName);
+                if (string.IsNullOrEmpty(destination)) return NotFound($"{appPoolName}尚未定義");
 
-                using (ServerManager serverManager = new ServerManager())
-                {
-                    // 找到指定的應用程式集區
-                    ApplicationPool appPool = serverManager.ApplicationPools[appPoolName];
+                using ServerManager serverManager = new();
+                // 找到指定的應用程式集區
+                ApplicationPool appPool = serverManager.ApplicationPools[appPoolName];
 
-                    if (appPool == null) return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
+                if (appPool == null) return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
 
-                    appPool.Start();
+                appPool.Start();
 
-                    Thread.Sleep(1000);
+                Thread.Sleep(1000);
 
-                    return Ok($"應用程式集區成功啟用（狀態為：{appPool.State.ToString()}）");
-                }
+                return Ok($"應用程式集區成功啟用（狀態為：{appPool.State}）");
             }
             catch (Exception ex)
             {
@@ -108,21 +102,20 @@ namespace website.updater.Controllers
         {
             try
             {
-                if (string.IsNullOrEmpty(CheckAppPoolName(appPoolName))) return NotFound($"{appPoolName}尚未定義");
+                var (destination, backup) = AppPoolUtils.CheckAppPoolName(options.Value, appPoolName);
+                if (string.IsNullOrEmpty(destination)) return NotFound($"{appPoolName}尚未定義");
 
-                using (ServerManager serverManager = new ServerManager())
-                {
-                    // 找到指定的應用程式集區
-                    ApplicationPool appPool = serverManager.ApplicationPools[appPoolName];
+                using ServerManager serverManager = new();
+                // 找到指定的應用程式集區
+                ApplicationPool appPool = serverManager.ApplicationPools[appPoolName];
 
-                    if (appPool == null) return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
+                if (appPool == null) return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
 
-                    appPool.Stop();
+                appPool.Stop();
 
-                    Thread.Sleep(1000);
+                Thread.Sleep(1000);
 
-                    return Ok($"應用程式集區成功停用（狀態為：{appPool.State.ToString()}）");
-                }
+                return Ok($"應用程式集區成功停用（狀態為：{appPool.State}）");
             }
             catch (Exception ex)
             {
@@ -139,56 +132,18 @@ namespace website.updater.Controllers
         {
             try
             {
-                var memory = GetMemoryInfo();
+                var (usedMb, availableMb) = HardwareUtils.GetMemoryInfo();
                 return Ok(new
                 {
-                    CpuUsage = GetCpuUsage(),
-                    UsedMemory = memory.usedMb,
-                    AvaliableMemory = memory.availableMb,
+                    CpuUsage = HardwareUtils.GetCpuUsage(),
+                    UsedMemory = usedMb,
+                    AvaliableMemory = availableMb,
                 });
             }
             catch (Exception ex)
             {
                 return BadRequest(ex.Message);
             }
-        }
-
-        /// <summary>
-        ///  檢查應用程式集區名稱
-        /// </summary>
-        /// <param name="appPoolName"></param>
-        /// <returns></returns>
-        private string CheckAppPoolName(string appPoolName)
-        {
-            return _appSettings.AppSetting.FirstOrDefault(r => r.AppName == appPoolName)?.DirectoryName ?? string.Empty;
-        }
-
-        /// <summary>
-        /// 取得CPU使用率
-        /// </summary>
-        /// <returns></returns>
-        private float GetCpuUsage()
-        {
-            using var cpuCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total", true);
-            _ = cpuCounter.NextValue();
-            Thread.Sleep(1000); // 必須暫停 1 秒才能取得準確值
-            return (float)Math.Round(cpuCounter.NextValue(), 2);
-        }
-
-        /// <summary>
-        /// 取得記憶體使用率
-        /// </summary>
-        /// <returns></returns>
-        private (float usedMb, float availableMb) GetMemoryInfo()
-        {
-            using var totalCounter = new PerformanceCounter("Memory", "% Committed Bytes in Use");
-            using var availableCounter = new PerformanceCounter("Memory", "Available MBytes");
-
-            float availableMb = availableCounter.NextValue();
-            float committedBytes = totalCounter.NextValue();
-            float committedMb = committedBytes;
-
-            return (committedMb, availableMb);
         }
     }
 }

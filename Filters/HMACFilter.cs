@@ -10,19 +10,12 @@ namespace website.updater.Filters
         public HmacAuthAttribute(string secret) : base(typeof(HMACFilter))
         {
             // 傳遞 API Key 到過濾器
-            Arguments = new object[] { secret };
+            Arguments = [secret];
         }
     }
 
-    public class HMACFilter : IAsyncActionFilter
+    public class HMACFilter(string secret) : IAsyncActionFilter
     {
-        private readonly string _secret;
-
-        // 接受動態傳入的 API Key
-        public HMACFilter(string secret)
-        {
-            _secret = secret;
-        }
 
         public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
         {
@@ -56,12 +49,10 @@ namespace website.updater.Filters
         /// <returns></returns>
         private string GenerateHmacSignature(string apiKey)
         {
-            using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_secret)))
-            {
-                var message = $"{apiKey}_{DateTime.Now.ToString("yyyyMMdd")}_Mobagel";
-                var hashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(message));
-                return Convert.ToBase64String(hashBytes);
-            }
+            using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+            var message = $"{apiKey}_{DateTime.Now:yyyyMMdd}_Mobagel";
+            var hashBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(message));
+            return Convert.ToBase64String(hashBytes);
         }
     }
 }
