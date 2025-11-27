@@ -5,6 +5,7 @@
 ## 功能特色
 
 - 🔄 **自動更新網站程式**：透過 API 上傳 ZIP 檔案自動更新網站
+- ⚛️ **NextJS 專案更新**：支援 NextJS 專案自動更新，整合 PM2 管理
 - 💾 **自動備份功能**：更新前自動備份，支援時間戳記備份目錄
 - 🗑️ **自動清理舊備份**：自動清理超過 7 天的備份檔案，節省磁碟空間
 - 🎛️ **應用程式集區管理**：啟動、停止應用程式集區
@@ -14,8 +15,9 @@
 ## 系統需求
 
 - .NET 8.0 或更高版本
-- Windows Server 與 IIS
-- 管理員權限（用於管理 IIS 應用程式集區）
+- Windows Server 與 IIS（用於 IIS 應用程式集區管理）
+- PM2（用於 NextJS 專案管理，需全域安裝）
+- 系統管理員權限（用於管理 IIS 應用程式集區及執行 PM2 命令）
 
 ## 安裝說明
 
@@ -44,15 +46,32 @@
         "DirectoryName": "網站檔案路徑",
         "BackupPath": "備份檔案路徑"
       }
+    ],
+    "NextJSProjects": [
+      {
+        "ProjectName": "專案名稱",
+        "Pm2Id": "PM2 程序 ID",
+        "DirectoryPath": "網站檔案路徑",
+        "BackupPath": "備份檔案路徑"
+      }
     ]
   }
 }
 ```
 
 **設定說明：**
+
+>  AppSetting
+
 - `AppName`：IIS 應用程式集區的名稱（必須與 IIS 中的名稱完全一致）
 - `DirectoryName`：網站檔案所在的完整路徑
 - `BackupPath`：備份檔案的基礎路徑（更新前會自動在此路徑下建立帶時間戳記的備份目錄）
+> NextJSProjects
+
+- `ProjectName`：專案名稱（用於 API 端點識別）
+- `Pm2Id`：PM2 程序 ID（可透過 `pm2 list` 查詢）
+- `DirectoryPath`：NextJS 專案所在的完整路徑
+- `BackupPath`：備份檔案的基礎路徑（更新前會自動在此路徑下建立帶時間戳記的備份目錄，**備份時會排除 node_modules**）
 
 **範例：**
 ```json
@@ -63,6 +82,14 @@
         "AppName": "newTalent",
         "DirectoryName": "C:\\WebSite\\newTalent",
         "BackupPath": "C:\\Backup\\newTalent"
+      }
+    ],
+    "NextJSProjects": [
+      {
+        "ProjectName": "myNextJSApp",
+        "Pm2Id": "0",
+        "DirectoryPath": "C:\\Projects\\myNextJSApp",
+        "BackupPath": "C:\\Projects\\Backup\\myNextJSApp"
       }
     ]
   }
@@ -162,7 +189,59 @@ curl -X POST "https://your-server/api/update/pool/newTalent" \
 }
 ```
 
-#### 4. 取得電腦資訊
+#### 4. 更新 NextJS 專案
+
+**端點：** `POST /api/update/nextjs/{projectName}`
+
+**說明：** 更新指定 NextJS 專案，更新前會自動停止 PM2 程序、執行備份（排除 node_modules）、清除舊檔案，更新完成後自動啟動 PM2 程序並儲存設定。
+
+**參數：**
+- `projectName`（路徑參數）：NextJS 專案名稱（需在設定檔中定義）
+- `file`（表單資料）：ZIP 格式的更新檔案
+
+**請求範例：**
+```bash
+curl -X POST "https://your-server/api/update/nextjs/myNextJSApp" \
+  -H "X-API-KEY: your-api-key" \
+  -H "X-Signature: your-signature" \
+  -F "file=@update.zip"
+```
+
+**回應範例：**
+```json
+{
+  "message": "myNextJSApp 專案已成功更新",
+  "details": {
+    "pm2Id": "0",
+    "directoryPath": "C:\\Projects\\myNextJSApp",
+    "backupPath": "C:\\Projects\\Backup\\myNextJSApp"
+  }
+}
+```
+
+**更新流程：**
+
+當執行 NextJS 更新 API 時，系統會依序執行以下步驟：
+
+1. ✅ 驗證專案是否存在於設定檔中
+2. ✅ 驗證上傳檔案格式（必須為 ZIP）
+3. ✅ 停止 PM2 程序（`pm2 stop {id}`）
+4. ✅ 執行備份（如果設定了備份路徑，**排除 node_modules**）
+5. ✅ 清理超過 7 天的舊備份檔案
+6. ✅ 清除專案目錄中的舊檔案
+7. ✅ 解壓縮並更新檔案
+8. ✅ 啟動 PM2 程序（`pm2 start {id}`）
+9. ✅ 儲存 PM2 設定（`pm2 save`）
+10. ✅ 回傳更新結果
+
+**備份說明：**
+- 如果設定了 `BackupPath`，系統會在更新前自動備份整個目錄
+- **備份時會自動排除 `node_modules` 目錄**，節省備份空間和時間
+- 備份目錄格式：`{BackupPath}/{ProjectName}_{yyyyMMdd_HHmmss}`
+- 例如：`C:\Projects\Backup\myNextJSApp\myNextJSApp_20240101_143022`
+- **自動清理**：系統會在每次備份後自動清理超過 7 天的舊備份檔案
+
+#### 5. 取得電腦資訊
 
 **端點：** `POST /api/update/computer/info`
 
@@ -179,12 +258,24 @@ curl -X POST "https://your-server/api/update/pool/newTalent" \
 
 ## 注意事項
 
+### IIS 應用程式集區相關
+
 1. **權限設定**：應用程式集區必須設定為 LocalSystem 權限，否則無法控制應用程式集區
 2. **備份路徑**：請確保備份路徑有足夠的磁碟空間（系統會自動清理超過 7 天的備份）
-3. **檔案格式**：更新檔案必須為 ZIP 格式
-4. **API 金鑰**：每個 API 端點都有不同的原始金鑰，需使用對應的 API Key
-5. **金鑰有效期**：API 金鑰僅在當天有效，隔天需重新產生
-6. **備份保留期限**：備份檔案會自動保留 7 天，超過 7 天的備份會在下次更新時自動刪除
+
+### NextJS 專案相關
+
+3. **PM2 安裝**：必須全域安裝 PM2（`npm install -g pm2`），且應用程式必須以系統管理員權限執行
+4. **PM2 程序 ID**：確保 `Pm2Id` 設定正確，可透過 `pm2 list` 命令查詢
+5. **node_modules 處理**：備份時會自動排除 `node_modules`，更新時會清除專案目錄但保留 `node_modules`（如果存在）
+
+### 通用注意事項
+
+6. **檔案格式**：更新檔案必須為 ZIP 格式
+7. **API 金鑰**：每個 API 端點都有不同的原始金鑰，需使用對應的 API Key
+8. **金鑰有效期**：API 金鑰僅在當天有效，隔天需重新產生
+9. **備份保留期限**：備份檔案會自動保留 7 天，超過 7 天的備份會在下次更新時自動刪除
+10. **系統管理員權限**：應用程式必須以系統管理員權限執行，才能正確執行 PM2 命令
 
 ## 授權
 

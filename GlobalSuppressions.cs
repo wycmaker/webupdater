@@ -7,3 +7,4 @@ using System.Diagnostics.CodeAnalysis;
 
 [assembly: SuppressMessage("Interoperability", "CA1416:驗證平台相容性", Justification = "<暫止>", Scope = "member", Target = "~M:website.updater.Utils.HardwareUtils.GetMemoryInfo~System.ValueTuple{System.Single,System.Single}")]
 [assembly: SuppressMessage("Interoperability", "CA1416:驗證平台相容性", Justification = "<暫止>", Scope = "member", Target = "~M:website.updater.Utils.HardwareUtils.GetCpuUsage~System.Single")]
+[assembly: SuppressMessage("Interoperability", "CA1416:驗證平台相容性", Justification = "<暫止>", Scope = "member", Target = "~M:website.updater.Controllers.UpdateController.UpdateNextJSProject(System.String,Microsoft.AspNetCore.Http.IFormFile)~Microsoft.AspNetCore.Mvc.IActionResult")]

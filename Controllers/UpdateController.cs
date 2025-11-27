@@ -145,5 +145,87 @@ namespace website.updater.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HmacAuth("nextjs_update_secret_key_placeholder")]
+        [HttpPost("nextjs/{projectName}")]
+        [Description("更新 NextJS 專案")]
+        [Consumes("multipart/form-data", "application/json")]
+        [Produces("application/json")]
+        public IActionResult UpdateNextJSProject(string projectName, IFormFile file)
+        {
+            try
+            {
+                // 檢查專案設定
+                var project = options.Value.NextJSProjects.FirstOrDefault(p => p.ProjectName == projectName);
+                if (project == null)
+                {
+                    return NotFound($"{projectName} 專案尚未定義");
+                }
+
+                // 驗證檔案格式
+                if (!file.ContentType.StartsWith("application/zip") && 
+                    !file.ContentType.StartsWith("application/x-zip-compressed"))
+                {
+                    return BadRequest("檔案格式錯誤，請上傳zip檔案");
+                }
+
+                // 步驟 1: 停止 PM2 程序
+                var (stopSuccess, stopMessage) = PM2Utils.StopProcess(project.Pm2Id);
+                if (!stopSuccess)
+                {
+                    return BadRequest($"停止 PM2 程序失敗: {stopMessage}");
+                }
+
+                Thread.Sleep(1000);
+
+                // 步驟 2: 備份舊檔案（排除 node_modules）
+                if (!string.IsNullOrEmpty(project.BackupPath))
+                {
+                    NextJSUtils.BackupNextJSProject(project.DirectoryPath, project.BackupPath, projectName);
+                }
+
+                // 步驟 3: 清除舊檔案
+                NextJSUtils.ClearProjectDirectory(project.DirectoryPath);
+
+                // 步驟 4: 解壓縮新檔案
+                using (var fileStream = file.OpenReadStream())
+                {
+                    ZipUtils.ExtractZipFile(fileStream, project.DirectoryPath);
+                }
+
+                // 步驟 5: 啟動 PM2 程序
+                var (startSuccess, startMessage) = PM2Utils.StartProcess(project.Pm2Id);
+                if (!startSuccess)
+                {
+                    return BadRequest($"啟動 PM2 程序失敗: {startMessage}");
+                }
+
+                Thread.Sleep(1000);
+
+                // 步驟 6: 儲存 PM2 設定
+                var (saveSuccess, saveMessage) = PM2Utils.Save();
+                if (!saveSuccess)
+                {
+                    Console.WriteLine($"警告: {saveMessage}");
+                    // 不中斷流程，僅記錄警告
+                }
+
+                // 步驟 7: 完成
+                return Ok(new
+                {
+                    message = $"{projectName} 專案已成功更新",
+                    details = new
+                    {
+                        pm2Id = project.Pm2Id,
+                        directoryPath = project.DirectoryPath,
+                        backupPath = project.BackupPath
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }
