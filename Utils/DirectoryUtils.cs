@@ -30,14 +30,11 @@ namespace website.updater.Utils
                     CopyDirectory(sourcePath, backupPath);
                 }
 
-                Console.WriteLine($"備份完成: {sourcePath} -> {backupPath}");
-
                 // 清理超過1個禮拜的備份檔案
                 CleanOldBackups(backupBasePath, backupName);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"備份失敗: {ex.Message}");
                 throw new Exception($"備份失敗: {ex.Message}", ex);
             }
         }
@@ -88,7 +85,6 @@ namespace website.updater.Utils
                                     if (backupDate < retentionDate)
                                     {
                                         DeleteDirectoryRecursively(backupDir);
-                                        Console.WriteLine($"已刪除舊備份: {backupDir}");
                                     }
                                 }
                             }
@@ -172,7 +168,6 @@ namespace website.updater.Utils
                 if (excludeDirectories != null && excludeDirectories.Any(exclude => 
                     subDir.Name.Equals(exclude, StringComparison.OrdinalIgnoreCase)))
                 {
-                    Console.WriteLine($"跳過目錄: {subDir.FullName}");
                     continue;
                 }
 

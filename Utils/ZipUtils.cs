@@ -21,7 +21,6 @@ namespace website.updater.Utils
                 if (!string.IsNullOrEmpty(entry.Name)) // 忽略資料夾
                 {
                     entry.ExtractToFile(path, overwrite: true);
-                    Console.WriteLine($"Extracted: {entry.FullName}");
                 }
             }
         }
