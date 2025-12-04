@@ -19,7 +19,7 @@ namespace website.updater.Utils
         /// <param name="targetPath">目標路徑</param>
         public static void ClearProjectDirectory(string targetPath)
         {
-            DirectoryUtils.ClearDirectory(targetPath);
+            DirectoryUtils.ClearDirectory(targetPath, "node_modules");
         }
     }
 }

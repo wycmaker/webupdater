@@ -245,7 +245,7 @@ namespace website.updater.Utils
         /// 清除目錄內容（可選保留特定目錄）
         /// </summary>
         /// <param name="targetPath">目標路徑</param>
-        public static void ClearDirectory(string targetPath)
+        public static void ClearDirectory(string targetPath, params string[]? excludeDirectories)
         {
             if (!Directory.Exists(targetPath))
             {
@@ -275,6 +275,13 @@ namespace website.updater.Utils
                 {
                     try
                     {
+                        // 檢查是否在排除列表中
+                        if (excludeDirectories != null && excludeDirectories.Any(exclude =>
+                            subDir.Name.Equals(exclude, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            continue;
+                        }
+
                         DeleteDirectoryRecursively(subDir.FullName);
                     }
                     catch (Exception ex)
