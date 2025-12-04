@@ -7,6 +7,14 @@ namespace website.updater.Utils
     [SupportedOSPlatform("windows")]
     public static class PM2Utils
     {
+        private static string _pm2Path = string.Empty;
+
+        public static void Initialize(string pm2Path)
+        {
+            // 初始化邏輯（如果有需要）
+            _pm2Path = pm2Path;
+        }
+
         /// <summary>
         /// 檢查是否以系統管理員權限執行
         /// </summary>
@@ -31,7 +39,7 @@ namespace website.updater.Utils
         /// </summary>
         /// <param name="command">PM2 命令（例如：stop 0, start 0, save）</param>
         /// <returns>命令執行結果</returns>
-        public static (bool success, string output, string error) ExecutePM2Command(string command)
+        private static (bool success, string output, string error) ExecutePM2Command(string command)
         {
             try
             {
@@ -44,7 +52,7 @@ namespace website.updater.Utils
                 var processInfo = new ProcessStartInfo
                 {
                     FileName = "cmd.exe",
-                    Arguments = $"/c pm2 {command}",
+                    Arguments = $"/c {_pm2Path} {command}",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -80,7 +88,7 @@ namespace website.updater.Utils
         public static (bool success, string message) StopProcess(string pm2Id)
         {
             var (success, _, error) = ExecutePM2Command($"stop {pm2Id}");
-            
+
             if (success)
             {
                 return (true, $"PM2 程序 {pm2Id} 已停止");
@@ -99,7 +107,7 @@ namespace website.updater.Utils
         public static (bool success, string message) StartProcess(string pm2Id)
         {
             var (success, _, error) = ExecutePM2Command($"start {pm2Id}");
-            
+
             if (success)
             {
                 return (true, $"PM2 程序 {pm2Id} 已啟動");
@@ -117,7 +125,7 @@ namespace website.updater.Utils
         public static (bool success, string message) Save()
         {
             var (success, _, error) = ExecutePM2Command("save");
-            
+
             if (success)
             {
                 return (true, "PM2 設定已儲存");

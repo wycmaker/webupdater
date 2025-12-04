@@ -163,7 +163,7 @@ namespace website.updater.Controllers
                 }
 
                 // 驗證檔案格式
-                if (!file.ContentType.StartsWith("application/zip") && 
+                if (!file.ContentType.StartsWith("application/zip") &&
                     !file.ContentType.StartsWith("application/x-zip-compressed"))
                 {
                     return BadRequest("檔案格式錯誤，請上傳zip檔案");

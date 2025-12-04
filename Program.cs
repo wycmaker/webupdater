@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Options;
 using website.updater.Models;
+using website.updater.Utils;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +29,9 @@ if (builder.Environment.IsDevelopment())
 builder.Services.Configure<AppSettings>(builder.Configuration.GetSection("AppInfo"));
 
 var app = builder.Build();
+
+var settings = app.Services.GetRequiredService<IOptions<AppSettings>>().Value;
+PM2Utils.Initialize(settings.Pm2Path);
 
 // Configure the HTTP request pipeline.
 

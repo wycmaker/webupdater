@@ -165,7 +165,7 @@ namespace website.updater.Utils
             foreach (DirectoryInfo subDir in dir.GetDirectories())
             {
                 // 檢查是否在排除列表中
-                if (excludeDirectories != null && excludeDirectories.Any(exclude => 
+                if (excludeDirectories != null && excludeDirectories.Any(exclude =>
                     subDir.Name.Equals(exclude, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
