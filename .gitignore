@@ -60,3 +60,5 @@ Properties/
 *.user
 *.userosscache
 *.sln.docstates
+
+publish/
