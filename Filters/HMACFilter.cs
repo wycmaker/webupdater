@@ -35,7 +35,7 @@ namespace website.updater.Filters
             // 驗證簽名
             if (signature != validSignature)
             {
-                context.Result = new ForbidResult();
+                context.Result = new StatusCodeResult(403);
                 return;
             }
 
