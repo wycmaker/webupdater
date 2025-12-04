@@ -12,6 +12,14 @@ namespace website.updater.Controllers
     [ApiController]
     public class UpdateController(IOptions<AppSettings> options) : ControllerBase
     {
+        /// <summary>
+        /// 驗證檔案是否為有效的 ZIP 檔案
+        /// </summary>
+        private static bool IsValidZipFile(IFormFile file)
+        {
+            return file.ContentType.StartsWith("application/zip") ||
+                   file.ContentType.StartsWith("application/x-zip-compressed");
+        }
 
         [HmacAuth("402881e69439739b01943992ce840002")]
         [HttpPost("pool/{appPoolName}")]
@@ -22,39 +30,43 @@ namespace website.updater.Controllers
         {
             try
             {
-                var (destinationPath, backupPath) = AppPoolUtils.CheckAppPoolName(options.Value, appPoolName);
+                var appSetting = AppPoolUtils.GetAppSetting(options.Value, appPoolName);
+                if (appSetting == null || string.IsNullOrEmpty(appSetting.DirectoryName))
+                {
+                    return NotFound($"{appPoolName}尚未定義");
+                }
 
-                if (string.IsNullOrEmpty(destinationPath)) return NotFound($"{appPoolName}尚未定義");
+                if (!IsValidZipFile(file))
+                {
+                    return BadRequest("檔案格式錯誤，請上傳zip檔案");
+                }
 
-                if (!file.ContentType.StartsWith("application/zip") && !file.ContentType.StartsWith("application/x-zip-compressed")) return BadRequest("檔案格式錯誤，請上傳zip檔案");
-
-                using ServerManager serverManager = new();
-                // 找到指定的應用程式集區
-                ApplicationPool appPool = serverManager.ApplicationPools[appPoolName];
-
-                if (appPool == null) return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
+                var appPool = AppPoolUtils.GetAppPoolByName(appPoolName);
+                if (appPool == null)
+                {
+                    return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
+                }
 
                 // 停止應用程式集區
-                appPool.Stop();
-
-                Thread.Sleep(1000);
+                AppPoolUtils.ExecuteAppPoolAction(appPool, pool => pool.Stop());
 
                 // 執行備份
-                if (!string.IsNullOrEmpty(backupPath))
+                if (!string.IsNullOrEmpty(appSetting.BackupPath))
                 {
-                    AppPoolUtils.BackupDirectory(destinationPath, backupPath, appPoolName);
+                    AppPoolUtils.BackupDirectory(appSetting.DirectoryName, appSetting.BackupPath, appPoolName, appSetting.ExcludeItem);
                 }
+
+                // 清除目標目錄
+                AppPoolUtils.ClearProjectDirectory(appSetting.DirectoryName, appSetting.ExcludeItem);
 
                 // 處理更新
                 using (var fileStream = file.OpenReadStream())
                 {
-                    ZipUtils.ExtractZipFile(fileStream, destinationPath);
+                    ZipUtils.ExtractZipFile(fileStream, appSetting.DirectoryName);
                 }
 
                 // 啟動應用程式集區
-                appPool.Start();
-
-                Thread.Sleep(1000);
+                AppPoolUtils.ExecuteAppPoolAction(appPool, pool => pool.Start());
                 return Ok($"{appPoolName}的程式已成功更新");
             }
             catch (Exception ex)
@@ -70,27 +82,7 @@ namespace website.updater.Controllers
         [Produces("application/json")]
         public IActionResult StartApplicationPool(string appPoolName)
         {
-            try
-            {
-                var (destination, backup) = AppPoolUtils.CheckAppPoolName(options.Value, appPoolName);
-                if (string.IsNullOrEmpty(destination)) return NotFound($"{appPoolName}尚未定義");
-
-                using ServerManager serverManager = new();
-                // 找到指定的應用程式集區
-                ApplicationPool appPool = serverManager.ApplicationPools[appPoolName];
-
-                if (appPool == null) return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
-
-                appPool.Start();
-
-                Thread.Sleep(1000);
-
-                return Ok($"應用程式集區成功啟用（狀態為：{appPool.State}）");
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            return ControlApplicationPool(appPoolName, pool => pool.Start(), "啟用");
         }
 
         [HmacAuth("4b1141f07aa426ac017aa443b3450b02")]
@@ -100,22 +92,31 @@ namespace website.updater.Controllers
         [Produces("application/json")]
         public IActionResult StopApplicationPool(string appPoolName)
         {
+            return ControlApplicationPool(appPoolName, pool => pool.Stop(), "停用");
+        }
+
+        /// <summary>
+        /// 控制應用程式集區的通用方法（包含驗證，用於 API 端點）
+        /// </summary>
+        private IActionResult ControlApplicationPool(string appPoolName, Action<ApplicationPool> action, string actionName)
+        {
             try
             {
-                var (destination, backup) = AppPoolUtils.CheckAppPoolName(options.Value, appPoolName);
-                if (string.IsNullOrEmpty(destination)) return NotFound($"{appPoolName}尚未定義");
+                var appSetting = AppPoolUtils.GetAppSetting(options.Value, appPoolName);
+                if (appSetting == null || string.IsNullOrEmpty(appSetting.DirectoryName))
+                {
+                    return NotFound($"{appPoolName}尚未定義");
+                }
 
-                using ServerManager serverManager = new();
-                // 找到指定的應用程式集區
-                ApplicationPool appPool = serverManager.ApplicationPools[appPoolName];
+                var appPool = AppPoolUtils.GetAppPoolByName(appPoolName);
+                if (appPool == null)
+                {
+                    return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
+                }
 
-                if (appPool == null) return NotFound($"找不到名為 {appPoolName} 的應用程式集區。");
+                AppPoolUtils.ExecuteAppPoolAction(appPool, action);
 
-                appPool.Stop();
-
-                Thread.Sleep(1000);
-
-                return Ok($"應用程式集區成功停用（狀態為：{appPool.State}）");
+                return Ok($"應用程式集區成功{actionName}（狀態為：{appPool.State}）");
             }
             catch (Exception ex)
             {
@@ -146,7 +147,7 @@ namespace website.updater.Controllers
             }
         }
 
-        [HmacAuth("nextjs_update_secret_key_placeholder")]
+        [HmacAuth("4b1141f07d90427f017d9042e6ad0011")]
         [HttpPost("nextjs/{projectName}")]
         [Description("更新 NextJS 專案")]
         [Consumes("multipart/form-data", "application/json")]
@@ -156,15 +157,14 @@ namespace website.updater.Controllers
             try
             {
                 // 檢查專案設定
-                var project = options.Value.NextJSProjects.FirstOrDefault(p => p.ProjectName == projectName);
+                var project = NextJSUtils.GetNextJSProjectSetting(options.Value, projectName);
                 if (project == null)
                 {
                     return NotFound($"{projectName} 專案尚未定義");
                 }
 
                 // 驗證檔案格式
-                if (!file.ContentType.StartsWith("application/zip") &&
-                    !file.ContentType.StartsWith("application/x-zip-compressed"))
+                if (!IsValidZipFile(file))
                 {
                     return BadRequest("檔案格式錯誤，請上傳zip檔案");
                 }
@@ -178,14 +178,14 @@ namespace website.updater.Controllers
 
                 Thread.Sleep(1000);
 
-                // 步驟 2: 備份舊檔案（排除 node_modules）
+                // 步驟 2: 備份舊檔案
                 if (!string.IsNullOrEmpty(project.BackupPath))
                 {
-                    NextJSUtils.BackupNextJSProject(project.DirectoryPath, project.BackupPath, projectName);
+                    NextJSUtils.BackupNextJSProject(project.DirectoryPath, project.BackupPath, projectName, project.ExcludeItem);
                 }
 
                 // 步驟 3: 清除舊檔案
-                NextJSUtils.ClearProjectDirectory(project.DirectoryPath);
+                NextJSUtils.ClearProjectDirectory(project.DirectoryPath, project.ExcludeItem);
 
                 // 步驟 4: 解壓縮新檔案
                 using (var fileStream = file.OpenReadStream())

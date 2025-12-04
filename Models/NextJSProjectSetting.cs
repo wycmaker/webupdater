@@ -21,6 +21,11 @@ namespace website.updater.Models
         /// 備份路徑
         /// </summary>
         public string BackupPath { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 排除項目
+        /// </summary>
+        public List<string> ExcludeItem { get; set; } = new();
     }
 }
 

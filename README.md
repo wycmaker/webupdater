@@ -102,7 +102,8 @@ pm2 --version
       {
         "AppName": "應用程式集區名稱",
         "DirectoryName": "網站檔案路徑",
-        "BackupPath": "備份檔案路徑"
+        "BackupPath": "備份檔案路徑",
+        "ExcludeItem": ["排除項目1", "排除項目2"]
       }
     ],
     "NextJSProjects": [
@@ -110,9 +111,11 @@ pm2 --version
         "ProjectName": "專案名稱",
         "Pm2Id": "PM2 程序 ID",
         "DirectoryPath": "網站檔案路徑",
-        "BackupPath": "備份檔案路徑"
+        "BackupPath": "備份檔案路徑",
+        "ExcludeItem": ["排除項目1", "排除項目2"]
       }
-    ]
+    ],
+    "Pm2Path": "pm2"
   }
 }
 ```
@@ -124,12 +127,28 @@ pm2 --version
 - `AppName`：IIS 應用程式集區的名稱（必須與 IIS 中的名稱完全一致）
 - `DirectoryName`：網站檔案所在的完整路徑
 - `BackupPath`：備份檔案的基礎路徑（更新前會自動在此路徑下建立帶時間戳記的備份目錄）
+- `ExcludeItem`：要排除的項目列表（選填，字串陣列）
+  - 備份和清除時會排除指定的檔案或資料夾
+  - 比對時不區分大小寫
+  - 例如：`["node_modules", ".git", ".env", "logs"]` 會排除名為 `node_modules`、`.git`、`.env`、`logs` 的檔案或資料夾
+
 > NextJSProjects
 
 - `ProjectName`：專案名稱（用於 API 端點識別）
 - `Pm2Id`：PM2 程序 ID（可透過 `pm2 list` 查詢）
 - `DirectoryPath`：NextJS 專案所在的完整路徑
-- `BackupPath`：備份檔案的基礎路徑（更新前會自動在此路徑下建立帶時間戳記的備份目錄，**備份時會排除 node_modules**）
+- `BackupPath`：備份檔案的基礎路徑（更新前會自動在此路徑下建立帶時間戳記的備份目錄）
+- `ExcludeItem`：要排除的項目列表（選填，字串陣列）
+  - 備份和清除時會排除指定的檔案或資料夾
+  - 比對時不區分大小寫
+  - **注意**：NextJS 專案會自動排除 `node_modules`，即使未在 `ExcludeItem` 中指定
+  - 例如：`[".git", ".env", "logs"]` 會排除名為 `.git`、`.env`、`logs` 的檔案或資料夾
+
+> AppInfo
+
+- `Pm2Path`：PM2 可執行檔的路徑（選填，預設為 `"pm2"`）
+  - 如果 PM2 已加入系統 PATH，可設為 `"pm2"`
+  - 如果需要指定完整路徑，例如：`"C:\\npm\\pm2.cmd"` 或 `"C:\\Program Files\\nodejs\\pm2.cmd"`
 
 **範例：**
 ```json
@@ -139,7 +158,8 @@ pm2 --version
       {
         "AppName": "newTalent",
         "DirectoryName": "C:\\WebSite\\newTalent",
-        "BackupPath": "C:\\Backup\\newTalent"
+        "BackupPath": "C:\\Backup\\newTalent",
+        "ExcludeItem": [".git", "logs", "temp"]
       }
     ],
     "NextJSProjects": [
@@ -147,9 +167,11 @@ pm2 --version
         "ProjectName": "myNextJSApp",
         "Pm2Id": "0",
         "DirectoryPath": "C:\\Projects\\myNextJSApp",
-        "BackupPath": "C:\\Projects\\Backup\\myNextJSApp"
+        "BackupPath": "C:\\Projects\\Backup\\myNextJSApp",
+        "ExcludeItem": [".git", ".env", "logs"]
       }
-    ]
+    ],
+    "Pm2Path": "pm2"
   }
 }
 ```
@@ -205,14 +227,16 @@ curl -X POST "https://your-server/api/update/pool/newTalent" \
 3. ✅ 停止應用程式集區
 4. ✅ 執行備份（如果設定了備份路徑）
 5. ✅ 清理超過 7 天的舊備份檔案
-6. ✅ 解壓縮並更新檔案
-7. ✅ 啟動應用程式集區
-8. ✅ 回傳更新結果
+6. ✅ 清除專案目錄中的舊檔案
+7. ✅ 解壓縮並更新檔案
+8. ✅ 啟動應用程式集區
+9. ✅ 回傳更新結果
 
 **備份說明：**
 - 如果設定了 `BackupPath`，系統會在更新前自動備份整個目錄
 - 備份目錄格式：`{BackupPath}/{AppName}_{yyyyMMdd_HHmmss}`
 - 例如：`C:\Backup\newTalent\newTalent_20240101_143022`
+- **排除項目**：備份時會自動排除 `ExcludeItem` 中指定的檔案或資料夾
 - **自動清理**：系統會在每次備份後自動清理超過 7 天的舊備份檔案，避免占用過多磁碟空間
 
 #### 2. 啟動應用程式集區
@@ -295,6 +319,7 @@ curl -X POST "https://your-server/api/update/nextjs/myNextJSApp" \
 **備份說明：**
 - 如果設定了 `BackupPath`，系統會在更新前自動備份整個目錄
 - **備份時會自動排除 `node_modules` 目錄**，節省備份空間和時間
+- **排除項目**：備份和清除時會自動排除 `ExcludeItem` 中指定的檔案或資料夾（NextJS 專案會自動包含 `node_modules`）
 - 備份目錄格式：`{BackupPath}/{ProjectName}_{yyyyMMdd_HHmmss}`
 - 例如：`C:\Projects\Backup\myNextJSApp\myNextJSApp_20240101_143022`
 - **自動清理**：系統會在每次備份後自動清理超過 7 天的舊備份檔案
@@ -325,7 +350,9 @@ curl -X POST "https://your-server/api/update/nextjs/myNextJSApp" \
 
 3. **PM2 安裝**：必須全域安裝 PM2（`npm install -g pm2`），**建議使用系統目錄安裝**（如 `C:\npm`），以便在 LocalSystem 環境下正常運作。詳細設定步驟請參考「安裝說明」中的「設定 PM2」章節
 4. **PM2 程序 ID**：確保 `Pm2Id` 設定正確，可透過 `pm2 list` 命令查詢
-5. **node_modules 處理**：備份時會自動排除 `node_modules`，更新時會清除專案目錄但保留 `node_modules`（如果存在）
+5. **PM2 路徑**：如果 PM2 不在系統 PATH 中，請在 `Pm2Path` 中指定完整路徑
+6. **node_modules 處理**：備份時會自動排除 `node_modules`，更新時會清除專案目錄但保留 `node_modules`（如果存在）
+7. **排除項目**：NextJS 專案會自動排除 `node_modules`，即使未在 `ExcludeItem` 中指定
 
 ### 通用注意事項
 
@@ -335,6 +362,11 @@ curl -X POST "https://your-server/api/update/nextjs/myNextJSApp" \
 9. **備份保留期限**：備份檔案會自動保留 7 天，超過 7 天的備份會在下次更新時自動刪除
 10. **系統管理員權限**：應用程式必須以系統管理員權限執行，才能正確執行 PM2 命令
 11. **請求體大小限制**：預設支援最大 500MB 的檔案上傳，如需調整請修改 `Program.cs` 和 `web.config` 中的設定
+12. **排除項目設定**：
+    - `ExcludeItem` 為選填項目，可設定為空陣列 `[]` 或不設定
+    - 排除比對不區分大小寫
+    - 可同時排除檔案和資料夾
+    - 備份和清除操作都會套用排除設定
 
 ## 授權
 

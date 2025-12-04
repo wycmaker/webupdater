@@ -3,13 +3,24 @@ namespace website.updater.Utils
     public static class DirectoryUtils
     {
         /// <summary>
+        /// 檢查項目是否在排除列表中
+        /// </summary>
+        /// <param name="itemName">項目名稱</param>
+        /// <param name="excludeItems">排除項目列表</param>
+        /// <returns>如果項目應該被排除則返回 true</returns>
+        private static bool IsExcluded(string itemName, List<string>? excludeItems)
+        {
+            return excludeItems != null && excludeItems.Any(exclude =>
+                itemName.Equals(exclude, StringComparison.OrdinalIgnoreCase));
+        }
+        /// <summary>
         /// 備份目錄到指定位置
         /// </summary>
         /// <param name="sourcePath">來源路徑</param>
         /// <param name="backupBasePath">備份基礎路徑</param>
         /// <param name="backupName">備份名稱（用於生成備份目錄名稱）</param>
-        /// <param name="excludeDirectories">要排除的目錄名稱列表（不區分大小寫）</param>
-        public static void BackupDirectory(string sourcePath, string backupBasePath, string backupName, params string[] excludeDirectories)
+        /// <param name="excludeItems">要排除的項目列表（檔案或資料夾名稱，不區分大小寫）</param>
+        public static void BackupDirectory(string sourcePath, string backupBasePath, string backupName, List<string>? excludeItems = null)
         {
             try
             {
@@ -20,15 +31,8 @@ namespace website.updater.Utils
                 // 確保備份基礎目錄存在
                 Directory.CreateDirectory(backupBasePath);
 
-                // 複製目錄（可選排除特定目錄）
-                if (excludeDirectories != null && excludeDirectories.Length > 0)
-                {
-                    CopyDirectoryWithExclusion(sourcePath, backupPath, excludeDirectories);
-                }
-                else
-                {
-                    CopyDirectory(sourcePath, backupPath);
-                }
+                // 複製目錄（可選排除特定項目）
+                CopyDirectoryWithExclusion(sourcePath, backupPath, excludeItems);
 
                 // 清理超過1個禮拜的備份檔案
                 CleanOldBackups(backupBasePath, backupName);
@@ -105,11 +109,12 @@ namespace website.updater.Utils
         }
 
         /// <summary>
-        /// 複製目錄及其所有內容
+        /// 複製目錄（可選排除指定的檔案或資料夾）
         /// </summary>
         /// <param name="sourceDir">來源目錄</param>
         /// <param name="destDir">目標目錄</param>
-        public static void CopyDirectory(string sourceDir, string destDir)
+        /// <param name="excludeItems">要排除的項目列表（檔案或資料夾名稱，不區分大小寫），為 null 或空列表時不排除任何項目</param>
+        public static void CopyDirectoryWithExclusion(string sourceDir, string destDir, List<string>? excludeItems)
         {
             DirectoryInfo dir = new(sourceDir);
 
@@ -121,42 +126,14 @@ namespace website.updater.Utils
             // 創建目標目錄
             Directory.CreateDirectory(destDir);
 
-            // 複製所有檔案
+            // 複製所有檔案（排除指定檔案）
             foreach (FileInfo file in dir.GetFiles())
             {
-                string targetFilePath = Path.Combine(destDir, file.Name);
-                file.CopyTo(targetFilePath, overwrite: true);
-            }
+                if (IsExcluded(file.Name, excludeItems))
+                {
+                    continue;
+                }
 
-            // 遞迴複製所有子目錄
-            foreach (DirectoryInfo subDir in dir.GetDirectories())
-            {
-                string newDestinationDir = Path.Combine(destDir, subDir.Name);
-                CopyDirectory(subDir.FullName, newDestinationDir);
-            }
-        }
-
-        /// <summary>
-        /// 複製目錄（排除指定的目錄）
-        /// </summary>
-        /// <param name="sourceDir">來源目錄</param>
-        /// <param name="destDir">目標目錄</param>
-        /// <param name="excludeDirectories">要排除的目錄名稱列表（不區分大小寫）</param>
-        public static void CopyDirectoryWithExclusion(string sourceDir, string destDir, params string[]? excludeDirectories)
-        {
-            DirectoryInfo dir = new(sourceDir);
-
-            if (!dir.Exists)
-            {
-                throw new DirectoryNotFoundException($"來源目錄不存在: {sourceDir}");
-            }
-
-            // 創建目標目錄
-            Directory.CreateDirectory(destDir);
-
-            // 複製所有檔案
-            foreach (FileInfo file in dir.GetFiles())
-            {
                 string targetFilePath = Path.Combine(destDir, file.Name);
                 file.CopyTo(targetFilePath, overwrite: true);
             }
@@ -164,15 +141,13 @@ namespace website.updater.Utils
             // 遞迴複製所有子目錄（排除指定目錄）
             foreach (DirectoryInfo subDir in dir.GetDirectories())
             {
-                // 檢查是否在排除列表中
-                if (excludeDirectories != null && excludeDirectories.Any(exclude =>
-                    subDir.Name.Equals(exclude, StringComparison.OrdinalIgnoreCase)))
+                if (IsExcluded(subDir.Name, excludeItems))
                 {
                     continue;
                 }
 
                 string newDestinationDir = Path.Combine(destDir, subDir.Name);
-                CopyDirectoryWithExclusion(subDir.FullName, newDestinationDir, excludeDirectories);
+                CopyDirectoryWithExclusion(subDir.FullName, newDestinationDir, excludeItems);
             }
         }
 
@@ -242,10 +217,11 @@ namespace website.updater.Utils
         }
 
         /// <summary>
-        /// 清除目錄內容（可選保留特定目錄）
+        /// 清除目錄內容（可選保留特定檔案或資料夾）
         /// </summary>
         /// <param name="targetPath">目標路徑</param>
-        public static void ClearDirectory(string targetPath, params string[]? excludeDirectories)
+        /// <param name="excludeItems">要排除的項目列表（檔案或資料夾名稱，不區分大小寫）</param>
+        public static void ClearDirectory(string targetPath, List<string>? excludeItems = null)
         {
             if (!Directory.Exists(targetPath))
             {
@@ -256,11 +232,16 @@ namespace website.updater.Utils
             {
                 DirectoryInfo dir = new(targetPath);
 
-                // 刪除所有檔案
+                // 刪除所有檔案（排除指定檔案）
                 foreach (FileInfo file in dir.GetFiles())
                 {
                     try
                     {
+                        if (IsExcluded(file.Name, excludeItems))
+                        {
+                            continue;
+                        }
+
                         file.Attributes = FileAttributes.Normal;
                         file.Delete();
                     }
@@ -275,9 +256,7 @@ namespace website.updater.Utils
                 {
                     try
                     {
-                        // 檢查是否在排除列表中
-                        if (excludeDirectories != null && excludeDirectories.Any(exclude =>
-                            subDir.Name.Equals(exclude, StringComparison.OrdinalIgnoreCase)))
+                        if (IsExcluded(subDir.Name, excludeItems))
                         {
                             continue;
                         }
