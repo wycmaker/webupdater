@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.ComponentModel;
+using System.Security.Cryptography;
+using System.Text;
 using website.updater.Filters;
 using website.updater.Models;
 using website.updater.Utils;
@@ -22,7 +24,7 @@ namespace website.updater.Controllers
         [Description("執行 SQL 命令")]
         [Consumes("application/json")]
         [Produces("application/json")]
-        public IActionResult ExecuteSql(string? connectionStringName, [FromBody] SqlRequest request)
+        public async Task<IActionResult> ExecuteSql(string? connectionStringName, [FromBody] SqlRequest request)
         {
             try
             {
@@ -48,7 +50,7 @@ namespace website.updater.Controllers
                 // 執行 SQL 命令
                 var result = SqlUtils.Execute(
                     connectionString,
-                    request.SqlCommand,
+                    await ConvertToSqlCommand(request.SqlCommand, request.Iv),
                     request.IsQuery,
                     request.CommandTimeout
                 );
@@ -93,6 +95,40 @@ namespace website.updater.Controllers
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// 轉換SQL語法
+        /// </summary>
+        /// <param name="command"></param>
+        /// <returns></returns>
+        private async Task<string> ConvertToSqlCommand(string command, string ivBase64)
+        {
+            try
+            {
+                var key = Encoding.UTF8.GetBytes("3062147169af4a619a25008379379e4f");
+
+                var cipherBytes = Convert.FromBase64String(command);
+                var iv = Convert.FromBase64String(ivBase64);
+
+                var plaintext = new byte[cipherBytes.Length - 16]; // AES-GCM tag = 16 bytes
+                var tag = new byte[16];
+
+                Buffer.BlockCopy(cipherBytes, cipherBytes.Length - 16, tag, 0, 16);
+                var cipher = new byte[cipherBytes.Length - 16];
+                Buffer.BlockCopy(cipherBytes, 0, cipher, 0, cipher.Length);
+
+                using var aes = new AesGcm(key, 16);
+
+                aes.Decrypt(iv, cipher, tag, plaintext);
+
+                return Encoding.UTF8.GetString(plaintext);
+            }
+            catch
+            {
+                // 如果不是有效的 Base64 字串，直接返回原始命令
+                return command;
+            }
         }
     }
 }

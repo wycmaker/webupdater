@@ -20,6 +20,11 @@ namespace website.updater.Models
         /// 命令逾時時間（秒），預設為 30 秒
         /// </summary>
         public int CommandTimeout { get; set; } = 30;
+
+        /// <summary>
+        /// AES GCM 模式的加密向量（IV)
+        /// </summary>
+        public string Iv { get; set; } = string.Empty;
     }
 }
 
